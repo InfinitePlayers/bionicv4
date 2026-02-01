@@ -29,13 +29,15 @@ const App: React.FC = () => {
   const distUnit = capHeight * BRAND.metrics.offsetRatio;
   const shiftPx = capHeight * BRAND.metrics.shiftRatio;
 
-  // Geometry compensation
+  // Geometry compensation for rotation
   const rotationComp = Math.abs(Math.sin(BRAND.metrics.angle * Math.PI / 180) * 400); 
   
+  // Gap between boxes
   const boxStackOffset = style === 'standard' 
     ? (distUnit + rotationComp) 
     : (-distUnit + rotationComp);
   
+  // Bionic Shift (indentation)
   let horizontalShift = 0;
   if (composition === 'offset') {
     if (alignment === 'left') horizontalShift = shiftPx;
@@ -57,13 +59,16 @@ const App: React.FC = () => {
 
   /**
    * HIGH-FIDELITY HD EXPORT ENGINE
+   * @param exportMode 'master' (full bg), 'layer1' (top only), 'layer2' (bottom only), 'combo' (both transparent)
    */
-  const exportAsset = async (forceTransparent: boolean = false) => {
+  const exportAsset = async (exportMode: 'master' | 'layer1' | 'layer2' | 'combo') => {
     if (isExporting) return;
     setIsExporting(true);
-    showNotification(forceTransparent ? "Generating Layer..." : "Synthesizing HD Master...");
+    
+    const isTransparent = exportMode !== 'master';
+    showNotification(isTransparent ? `Exporting ${exportMode}...` : "Synthesizing HD Master...");
 
-    // Wait for fonts to be ready
+    // Wait for fonts
     await document.fonts.ready;
 
     const canvas = document.createElement("canvas");
@@ -75,46 +80,103 @@ const App: React.FC = () => {
         return;
     }
 
-    // 1. Background
+    // 1. Setup Background
     ctx.clearRect(0, 0, 1920, 1080);
-    
-    if (!forceTransparent && canvasBg !== 'transparent') {
+    if (!isTransparent && canvasBg !== 'transparent') {
       ctx.fillStyle = BRAND.colors[canvasBg as keyof typeof BRAND.colors] || '#ffffff';
       ctx.fillRect(0, 0, 1920, 1080);
     }
 
-    const centerX = 1920 / 2;
-    const centerY = 1080 / 2;
+    // Tracking setting (1% negative tracking for HD Brand feel)
+    // Relaxed from previous -0.04 to -0.01 to prevent bunching
+    const trackingRatio = -0.01; 
 
-    // 2. Draw Logic
+    // 2. Measure Function (To handle alignment)
+    const getBoxWidth = (txt: string) => {
+      ctx.font = `900 ${fontSize}px Poppins, sans-serif`;
+      const tracking = trackingRatio * fontSize;
+      const chars = [...(txt || ' ')];
+      const charWidths = chars.map(c => ctx.measureText(c).width);
+      // Logic: Sum of chars + (N) trackings. 
+      // Note: We usually don't apply tracking after the last char in some engines, 
+      // but here we are measuring the box which wraps the text.
+      // Let's standardise: Width = Sum(Chars) + (Chars.length - 1) * tracking.
+      // But simpler for this visual style is to just add tracking to every char.
+      const totalTextWidth = charWidths.reduce((a, b) => a + b + tracking, 0); 
+      // Remove one unit of tracking from the end if strictly typographic, 
+      // but for "box" containment, keeping it loose is safer. 
+      // Let's stick to the previous loop logic:
+      // In loop: cursorX += charWidth + tracking.
+      // So width is Sum(charWidth + tracking).
+      return totalTextWidth + (brandPadding * 2) - tracking; // Subtract last tracking to be precise
+    };
+
+    const w1 = getBoxWidth(text1);
+    const w2 = getBoxWidth(text2);
+    const maxWidth = Math.max(w1, w2);
+    const screenCenter = 1920 / 2;
+    const screenCenterY = 1080 / 2;
+
+    // 3. Alignment Logic (Matches CSS Flexbox behavior)
+    // In CSS, the container is centered. The widest box defines the center axis.
+    // Narrower boxes align relative to that widest box.
+    const getAlignedCenterX = (boxWidth: number) => {
+      if (alignment === 'center') return screenCenter;
+      
+      const groupLeft = screenCenter - (maxWidth / 2);
+      const groupRight = screenCenter + (maxWidth / 2);
+
+      if (alignment === 'left') return groupLeft + (boxWidth / 2);
+      if (alignment === 'right') return groupRight - (boxWidth / 2);
+      
+      return screenCenter;
+    };
+
+    // 4. Draw Helper
     const drawHeading = (num: number) => {
+      // Skip drawing if we only want one specific layer
+      if (exportMode === 'layer1' && num !== 1) return;
+      if (exportMode === 'layer2' && num !== 2) return;
+
       const colors = getThemeColors(num);
       const angleVal = num === 1 ? BRAND.metrics.angle : -BRAND.metrics.angle;
       const rot = angleVal * (Math.PI / 180);
       const text = (num === 1 ? text1 : text2) || ' ';
       
-      const offset = boxStackOffset; 
-      const box1Y = -(totalBoxHeight + offset) / 2 + (totalBoxHeight / 2);
-      const box2Y = (totalBoxHeight + offset) / 2 - (totalBoxHeight / 2);
-      
+      // Vertical Position Calculation
+      const distBetweenCenters = totalBoxHeight + boxStackOffset;
+
+      // Offsets from Center Y
+      // Box 1 is above center, Box 2 is below center
+      const box1Y = -distBetweenCenters / 2;
+      const box2Y = distBetweenCenters / 2;
+
       const relativeY = num === 1 ? box1Y : box2Y;
-      const hShift = num === 1 ? 0 : horizontalShift;
+      
+      // Horizontal Position Calculation
+      const boxWidth = getBoxWidth(text);
+      const alignedX = getAlignedCenterX(boxWidth);
+      
+      // Add Bionic Shift (only affects Box 2)
+      const shiftX = num === 1 ? 0 : horizontalShift;
+      
+      const finalX = alignedX + shiftX;
+      const finalY = screenCenterY + relativeY;
 
       ctx.save();
-      ctx.translate(centerX + hShift, centerY + relativeY);
+      ctx.translate(finalX, finalY);
       ctx.rotate(rot);
 
       ctx.font = `900 ${fontSize}px Poppins, sans-serif`;
       
-      const tracking = -0.04 * fontSize;
+      // Tracking Logic
+      const tracking = trackingRatio * fontSize;
       const chars = [...text];
       const charWidths = chars.map(c => ctx.measureText(c).width);
-      const totalTextWidth = charWidths.reduce((a, b) => a + b + tracking, 0) - tracking;
-      const boxWidth = totalTextWidth + (brandPadding * 2);
 
       // Draw Box
       ctx.fillStyle = colors.bg;
-      if (!forceTransparent) {
+      if (!isTransparent) {
         ctx.shadowColor = 'rgba(0,0,0,0.15)';
         ctx.shadowBlur = 40;
         ctx.shadowOffsetY = 20;
@@ -127,6 +189,7 @@ const App: React.FC = () => {
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       
+      // Start position: Left edge of box + padding
       let cursorX = -boxWidth/2 + brandPadding;
       const yAdjust = fontSize * 0.05; 
 
@@ -138,22 +201,24 @@ const App: React.FC = () => {
       ctx.restore();
     };
 
+    // Draw Order
     if (stacking === 'box1') {
-      drawHeading(2);
-      drawHeading(1);
+      drawHeading(2); // Box 2 Bottom
+      drawHeading(1); // Box 1 Top
     } else {
       drawHeading(1);
       drawHeading(2);
     }
 
+    // Save
     setTimeout(() => {
       const link = document.createElement('a');
-      const suffix = forceTransparent ? '-layer' : '-master';
+      const suffix = exportMode === 'master' ? '-master' : `-${exportMode}`;
       link.download = `bionic-hd-${Date.now()}${suffix}.png`;
       link.href = canvas.toDataURL('image/png', 1.0);
       link.click();
       setIsExporting(false);
-      showNotification(forceTransparent ? "Layer Exported" : "Asset Saved");
+      showNotification("Download Started");
     }, 300);
   };
 
@@ -342,31 +407,55 @@ const App: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="p-6 border-t border-white/5 bg-[#080d1a] space-y-3 z-50">
-          <div className="grid grid-cols-2 gap-3">
-            {/* LAYER EXPORT (Transparent) */}
+          
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Transparent Layers</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Full Master</span>
+          </div>
+
+          <div className="grid grid-cols-[1fr_1fr_1fr_1.5fr] gap-2">
+            
+            {/* Layer 1 Export */}
             <button 
                 disabled={isExporting} 
-                onClick={() => exportAsset(true)} 
-                className="group py-4 bg-[#182865] hover:bg-[#20337a] text-white rounded-xl shadow-lg border border-white/5 transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 active:scale-95"
+                onClick={() => exportAsset('layer1')} 
+                className="group p-2 bg-[#182865] hover:bg-[#20337a] text-white rounded-xl shadow-lg border border-white/5 transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 active:scale-95"
+                title="Export Layer 1 Only"
             >
-                <div className="flex items-center gap-2">
-                    <ImageIcon size={16} className="text-[#ff6741]" />
-                    <span className="font-black uppercase text-[10px]">Export Layer</span>
-                </div>
-                <span className="text-[8px] text-slate-400 font-medium uppercase">Transparent PNG</span>
+                <div className="font-black text-[12px]">1</div>
+                <span className="text-[7px] font-bold uppercase opacity-50">Layer</span>
+            </button>
+
+            {/* Layer 2 Export */}
+            <button 
+                disabled={isExporting} 
+                onClick={() => exportAsset('layer2')} 
+                className="group p-2 bg-[#182865] hover:bg-[#20337a] text-white rounded-xl shadow-lg border border-white/5 transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 active:scale-95"
+                title="Export Layer 2 Only"
+            >
+                <div className="font-black text-[12px]">2</div>
+                <span className="text-[7px] font-bold uppercase opacity-50">Layer</span>
+            </button>
+
+             {/* Combo Export */}
+             <button 
+                disabled={isExporting} 
+                onClick={() => exportAsset('combo')} 
+                className="group p-2 bg-[#182865] hover:bg-[#20337a] text-white rounded-xl shadow-lg border border-white/5 transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 active:scale-95"
+                title="Export Combined Layers"
+            >
+                <ImageIcon size={14} className="mb-0.5" />
+                <span className="text-[7px] font-bold uppercase opacity-50">Combo</span>
             </button>
 
             {/* MASTER EXPORT (Full) */}
             <button 
                 disabled={isExporting} 
-                onClick={() => exportAsset(false)} 
-                className="group py-4 bg-[#ff6741] hover:bg-[#ff7a5a] text-white rounded-xl shadow-lg shadow-orange-900/20 transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 active:scale-95"
+                onClick={() => exportAsset('master')} 
+                className="group py-2 bg-[#ff6741] hover:bg-[#ff7a5a] text-white rounded-xl shadow-lg shadow-orange-900/20 transition-all flex flex-col items-center justify-center gap-1 disabled:opacity-50 active:scale-95"
             >
-                <div className="flex items-center gap-2">
-                    <Download size={16} />
-                    <span className="font-black uppercase text-[10px]">Export Master</span>
-                </div>
-                <span className="text-[8px] text-orange-900 font-bold uppercase">1920x1080 Full</span>
+                <Download size={16} />
+                <span className="text-[9px] font-black uppercase">Master</span>
             </button>
           </div>
         </div>
@@ -424,7 +513,7 @@ const App: React.FC = () => {
                 }}
               >
                 <div 
-                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] tracking-[-0.04em] whitespace-nowrap shadow-2xl"
+                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] tracking-[-0.01em] whitespace-nowrap shadow-2xl"
                   style={{ 
                     background: getThemeColors(1).bg, 
                     color: getThemeColors(1).text,
@@ -453,7 +542,7 @@ const App: React.FC = () => {
                 }}
               >
                 <div 
-                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] tracking-[-0.04em] whitespace-nowrap shadow-2xl"
+                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] tracking-[-0.01em] whitespace-nowrap shadow-2xl"
                   style={{ 
                     background: getThemeColors(2).bg, 
                     color: getThemeColors(2).text,
