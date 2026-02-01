@@ -22,6 +22,10 @@ const App: React.FC = () => {
   const [toast, setToast] = useState('');
   const [isExporting, setIsExporting] = useState(false);
 
+  // New Spacing State
+  const [wordSpacing, setWordSpacing] = useState(0.3);
+  const [letterSpacing, setLetterSpacing] = useState(0.02);
+
   // --- Brand Logic Constants ---
   const capHeight = fontSize * BRAND.metrics.capHeightRatio;
   const brandPadding = capHeight * BRAND.metrics.paddingRatio;
@@ -43,11 +47,6 @@ const App: React.FC = () => {
     if (alignment === 'left') horizontalShift = shiftPx;
     if (alignment === 'right') horizontalShift = -shiftPx;
   }
-
-  // Text Spacing Configuration
-  // Adjusted to be more open based on feedback
-  const letterSpacingEm = 0.02; // Positive tracking for cleaner look
-  const wordSpacingEm = 0.3;    // Significant spacing between words
 
   const getThemeColors = (boxNum: number) => {
     if (theme === 'alt') return boxNum === 1 ? { bg: BRAND.colors.navy, text: BRAND.colors.white } : { bg: BRAND.colors.orange, text: BRAND.colors.navy };
@@ -105,8 +104,8 @@ const App: React.FC = () => {
          const w = metrics.width;
          
          // Apply spacing logic
-         const tracking = fontSize * letterSpacingEm;
-         const wordSpace = (char === ' ') ? (fontSize * wordSpacingEm) : 0;
+         const tracking = fontSize * letterSpacing;
+         const wordSpace = (char === ' ') ? (fontSize * wordSpacing) : 0;
          
          const charTotalWidth = w + tracking + wordSpace;
          
@@ -292,19 +291,56 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            <div className="bg-[#060a14] p-4 rounded-xl border border-white/5 space-y-3">
-               <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                  <span>Size</span>
-                  <span>{fontSize}px</span>
+            <div className="bg-[#060a14] p-4 rounded-xl border border-white/5 space-y-4">
+               {/* Font Size */}
+               <div className="space-y-2">
+                   <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                      <span>Size</span>
+                      <span>{fontSize}px</span>
+                   </div>
+                   <input 
+                      type="range" 
+                      min="40" 
+                      max="200" 
+                      value={fontSize} 
+                      onChange={(e) => setFontSize(parseInt(e.target.value))} 
+                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#ff6741]" 
+                    />
                </div>
-               <input 
-                  type="range" 
-                  min="40" 
-                  max="200" 
-                  value={fontSize} 
-                  onChange={(e) => setFontSize(parseInt(e.target.value))} 
-                  className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#ff6741]" 
-                />
+
+               {/* Word Spacing */}
+               <div className="space-y-2">
+                   <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                      <span>Word Spacing</span>
+                      <span>{Math.round(wordSpacing * 100)}</span>
+                   </div>
+                   <input 
+                      type="range" 
+                      min="0" 
+                      max="1.5" 
+                      step="0.05" 
+                      value={wordSpacing} 
+                      onChange={(e) => setWordSpacing(parseFloat(e.target.value))} 
+                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#ff6741]" 
+                    />
+               </div>
+
+               {/* Letter Spacing */}
+               <div className="space-y-2">
+                   <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                      <span>Tracking</span>
+                      <span>{Math.round(letterSpacing * 100)}</span>
+                   </div>
+                   <input 
+                      type="range" 
+                      min="-0.1" 
+                      max="0.5" 
+                      step="0.01" 
+                      value={letterSpacing} 
+                      onChange={(e) => setLetterSpacing(parseFloat(e.target.value))} 
+                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#ff6741]" 
+                    />
+               </div>
             </div>
           </section>
 
@@ -532,8 +568,8 @@ const App: React.FC = () => {
                     // Fix optical vertical alignment for Poppins
                     lineHeight: 1, 
                     paddingTop: `${fontSize * 0.05}px`,
-                    letterSpacing: `${letterSpacingEm}em`,
-                    wordSpacing: `${wordSpacingEm}em`
+                    letterSpacing: `${letterSpacing}em`,
+                    wordSpacing: `${wordSpacing}em`
                   }}
                 >
                   {text1 || ' '}
@@ -561,8 +597,8 @@ const App: React.FC = () => {
                     paddingRight: `${brandPadding}px`,
                     lineHeight: 1, 
                     paddingTop: `${fontSize * 0.05}px`,
-                    letterSpacing: `${letterSpacingEm}em`,
-                    wordSpacing: `${wordSpacingEm}em`
+                    letterSpacing: `${letterSpacing}em`,
+                    wordSpacing: `${wordSpacing}em`
                   }}
                 >
                   {text2 || ' '}
