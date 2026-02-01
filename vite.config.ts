@@ -6,13 +6,10 @@ export default defineConfig({
   // -----------------------------------------------------------------------
   // DEPLOYMENT CONFIGURATION
   // -----------------------------------------------------------------------
-  // FOR GITHUB PAGES:
-  // Keep base set to '/bionic/' (or your exact repo name).
-  //
-  // FOR VERCEL / NETLIFY:
-  // Change base to '/' or remove the line entirely.
+  // FOR VERCEL (Your current screenshot):
+  // We must use '/' because Vercel hosts the app at the root domain.
   // -----------------------------------------------------------------------
-  base: '/bionic/', 
+  base: '/', 
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
