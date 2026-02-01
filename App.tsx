@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   Layers, AlignCenter, AlignLeft, AlignRight, 
   Maximize, Check, Palette, Type,
-  Grid, Download, Move, Box, Image as ImageIcon
+  Grid, Download, Move, Box, Image as ImageIcon,
+  Lock, Unlock, AlertTriangle, RotateCcw
 } from 'lucide-react';
 import { BRAND } from './constants';
 
@@ -23,8 +24,10 @@ const App: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
 
   // New Spacing State
-  const [wordSpacing, setWordSpacing] = useState(0.3);
-  const [letterSpacing, setLetterSpacing] = useState(0.02);
+  const BRAND_DEFAULTS = { word: 0.3, letter: 0.02 };
+  const [wordSpacing, setWordSpacing] = useState(BRAND_DEFAULTS.word);
+  const [letterSpacing, setLetterSpacing] = useState(BRAND_DEFAULTS.letter);
+  const [isSpacingLocked, setIsSpacingLocked] = useState(true);
 
   // --- Brand Logic Constants ---
   const capHeight = fontSize * BRAND.metrics.capHeightRatio;
@@ -59,6 +62,12 @@ const App: React.FC = () => {
   const showNotification = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
+  };
+
+  const resetSpacing = () => {
+    setWordSpacing(BRAND_DEFAULTS.word);
+    setLetterSpacing(BRAND_DEFAULTS.letter);
+    showNotification("Spacing Reset to Brand Standard");
   };
 
   /**
@@ -291,8 +300,32 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            <div className="bg-[#060a14] p-4 rounded-xl border border-white/5 space-y-4">
-               {/* Font Size */}
+            <div className={`bg-[#060a14] p-4 rounded-xl border ${isSpacingLocked ? 'border-white/5' : 'border-[#ff6741]/40'} space-y-4 transition-all duration-300 relative`}>
+               {/* Header & Lock */}
+               <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                   <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Sizing & Spacing</span>
+                      {!isSpacingLocked && (
+                        <span className="text-[8px] font-medium text-[#ff6741] uppercase animate-pulse">Expert Mode Unlocked</span>
+                      )}
+                   </div>
+                   
+                   <div className="flex items-center gap-2">
+                        {!isSpacingLocked && (
+                            <button onClick={resetSpacing} className="text-slate-500 hover:text-white transition-colors" title="Reset Defaults">
+                                <RotateCcw size={12} />
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => setIsSpacingLocked(!isSpacingLocked)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${isSpacingLocked ? 'bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10' : 'bg-[#ff6741] text-white shadow-lg shadow-orange-900/40'}`}
+                        >
+                            {isSpacingLocked ? <Lock size={10} /> : <Unlock size={10} />}
+                        </button>
+                   </div>
+               </div>
+
+               {/* Font Size (Always Editable) */}
                <div className="space-y-2">
                    <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
                       <span>Size</span>
@@ -308,35 +341,67 @@ const App: React.FC = () => {
                     />
                </div>
 
+               {/* Separator */}
+               <div className="h-px bg-white/5" />
+
                {/* Word Spacing */}
-               <div className="space-y-2">
+               <div className={`space-y-2 transition-all duration-300 ${isSpacingLocked ? 'opacity-40 grayscale pointer-events-none' : 'opacity-100'}`}>
                    <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                      <span>Word Spacing</span>
-                      <span>{Math.round(wordSpacing * 100)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span>Word Spacing</span>
+                        {wordSpacing < 0 && <AlertTriangle size={10} className="text-[#ff6741]" />}
+                      </div>
+                      <div className="flex items-center gap-2">
+                         {/* Show brand default comparison when unlocked */}
+                         {!isSpacingLocked && wordSpacing !== BRAND_DEFAULTS.word && (
+                            <span className="text-[8px] text-slate-600">Default: {Math.round(BRAND_DEFAULTS.word * 100)}</span>
+                         )}
+                         <span className={wordSpacing < 0 ? 'text-[#ff6741]' : ''}>{Math.round(wordSpacing * 100)}</span>
+                      </div>
                    </div>
+                   {!isSpacingLocked && wordSpacing < 0 && (
+                      <div className="text-[8px] text-[#ff6741] font-bold bg-[#ff6741]/10 px-2 py-1 rounded border border-[#ff6741]/20 flex items-center gap-1">
+                          <AlertTriangle size={8} /> NEGATIVE SPACING DETECTED
+                      </div>
+                   )}
                    <input 
                       type="range" 
-                      min="0" 
+                      min="-0.5" 
                       max="1.5" 
                       step="0.05" 
                       value={wordSpacing} 
+                      disabled={isSpacingLocked}
                       onChange={(e) => setWordSpacing(parseFloat(e.target.value))} 
                       className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#ff6741]" 
                     />
                </div>
 
                {/* Letter Spacing */}
-               <div className="space-y-2">
+               <div className={`space-y-2 transition-all duration-300 ${isSpacingLocked ? 'opacity-40 grayscale pointer-events-none' : 'opacity-100'}`}>
                    <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                      <span>Tracking</span>
-                      <span>{Math.round(letterSpacing * 100)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span>Tracking</span>
+                        {letterSpacing < 0 && <AlertTriangle size={10} className="text-[#ff6741]" />}
+                      </div>
+                      <div className="flex items-center gap-2">
+                         {!isSpacingLocked && letterSpacing !== BRAND_DEFAULTS.letter && (
+                            <span className="text-[8px] text-slate-600">Default: {Math.round(BRAND_DEFAULTS.letter * 100)}</span>
+                         )}
+                         <span className={letterSpacing < 0 ? 'text-[#ff6741]' : ''}>{Math.round(letterSpacing * 100)}</span>
+                      </div>
                    </div>
+                   {!isSpacingLocked && letterSpacing < 0 && (
+                      <div className="text-[8px] text-[#ff6741] font-bold bg-[#ff6741]/10 px-2 py-1 rounded border border-[#ff6741]/20 flex items-center gap-1">
+                          <AlertTriangle size={8} /> BRAND VIOLATION WARNING
+                      </div>
+                   )}
                    <input 
                       type="range" 
                       min="-0.1" 
                       max="0.5" 
                       step="0.01" 
                       value={letterSpacing} 
+                      disabled={isSpacingLocked}
                       onChange={(e) => setLetterSpacing(parseFloat(e.target.value))} 
                       className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#ff6741]" 
                     />
