@@ -44,6 +44,11 @@ const App: React.FC = () => {
     if (alignment === 'right') horizontalShift = -shiftPx;
   }
 
+  // Text Spacing Configuration
+  // Adjusted to be more open based on feedback
+  const letterSpacingEm = 0.02; // Positive tracking for cleaner look
+  const wordSpacingEm = 0.3;    // Significant spacing between words
+
   const getThemeColors = (boxNum: number) => {
     if (theme === 'alt') return boxNum === 1 ? { bg: BRAND.colors.navy, text: BRAND.colors.white } : { bg: BRAND.colors.orange, text: BRAND.colors.navy };
     if (theme === 'blue') return boxNum === 1 ? { bg: BRAND.colors.blue, text: BRAND.colors.white } : { bg: BRAND.colors.navy, text: BRAND.colors.white };
@@ -87,39 +92,47 @@ const App: React.FC = () => {
       ctx.fillRect(0, 0, 1920, 1080);
     }
 
-    // Tracking setting (1% negative tracking for HD Brand feel)
-    // Relaxed from previous -0.04 to -0.01 to prevent bunching
-    const trackingRatio = -0.01; 
-
-    // 2. Measure Function (To handle alignment)
-    const getBoxWidth = (txt: string) => {
+    // 2. Advanced Text Measurement Engine
+    // This ensures that the canvas measures text exactly the same way the logic calculates boxes
+    // including custom word spacing and tracking.
+    const measureLayout = (txt: string) => {
       ctx.font = `900 ${fontSize}px Poppins, sans-serif`;
-      const tracking = trackingRatio * fontSize;
       const chars = [...(txt || ' ')];
-      const charWidths = chars.map(c => ctx.measureText(c).width);
-      // Logic: Sum of chars + (N) trackings. 
-      // Note: We usually don't apply tracking after the last char in some engines, 
-      // but here we are measuring the box which wraps the text.
-      // Let's standardise: Width = Sum(Chars) + (Chars.length - 1) * tracking.
-      // But simpler for this visual style is to just add tracking to every char.
-      const totalTextWidth = charWidths.reduce((a, b) => a + b + tracking, 0); 
-      // Remove one unit of tracking from the end if strictly typographic, 
-      // but for "box" containment, keeping it loose is safer. 
-      // Let's stick to the previous loop logic:
-      // In loop: cursorX += charWidth + tracking.
-      // So width is Sum(charWidth + tracking).
-      return totalTextWidth + (brandPadding * 2) - tracking; // Subtract last tracking to be precise
+      
+      let cursor = 0;
+      const charData = chars.map(char => {
+         const metrics = ctx.measureText(char);
+         const w = metrics.width;
+         
+         // Apply spacing logic
+         const tracking = fontSize * letterSpacingEm;
+         const wordSpace = (char === ' ') ? (fontSize * wordSpacingEm) : 0;
+         
+         const charTotalWidth = w + tracking + wordSpace;
+         
+         const data = { char, x: cursor, width: charTotalWidth };
+         cursor += charTotalWidth;
+         return data;
+      });
+
+      // The box width includes the brand padding on both sides
+      const textWidth = cursor;
+      const boxWidth = textWidth + (brandPadding * 2);
+      
+      return { boxWidth, textWidth, charData };
     };
 
-    const w1 = getBoxWidth(text1);
-    const w2 = getBoxWidth(text2);
-    const maxWidth = Math.max(w1, w2);
+    const layout1 = measureLayout(text1);
+    const layout2 = measureLayout(text2);
+    
+    // Calculate Group Dimensions
+    const maxWidth = Math.max(layout1.boxWidth, layout2.boxWidth);
     const screenCenter = 1920 / 2;
     const screenCenterY = 1080 / 2;
 
     // 3. Alignment Logic (Matches CSS Flexbox behavior)
-    // In CSS, the container is centered. The widest box defines the center axis.
-    // Narrower boxes align relative to that widest box.
+    // The "Group" of two boxes is always centered on screen.
+    // The alignment determines how the boxes sit relative to each other within that centered group.
     const getAlignedCenterX = (boxWidth: number) => {
       if (alignment === 'center') return screenCenter;
       
@@ -141,7 +154,7 @@ const App: React.FC = () => {
       const colors = getThemeColors(num);
       const angleVal = num === 1 ? BRAND.metrics.angle : -BRAND.metrics.angle;
       const rot = angleVal * (Math.PI / 180);
-      const text = (num === 1 ? text1 : text2) || ' ';
+      const layout = num === 1 ? layout1 : layout2;
       
       // Vertical Position Calculation
       const distBetweenCenters = totalBoxHeight + boxStackOffset;
@@ -154,8 +167,7 @@ const App: React.FC = () => {
       const relativeY = num === 1 ? box1Y : box2Y;
       
       // Horizontal Position Calculation
-      const boxWidth = getBoxWidth(text);
-      const alignedX = getAlignedCenterX(boxWidth);
+      const alignedX = getAlignedCenterX(layout.boxWidth);
       
       // Add Bionic Shift (only affects Box 2)
       const shiftX = num === 1 ? 0 : horizontalShift;
@@ -168,11 +180,6 @@ const App: React.FC = () => {
       ctx.rotate(rot);
 
       ctx.font = `900 ${fontSize}px Poppins, sans-serif`;
-      
-      // Tracking Logic
-      const tracking = trackingRatio * fontSize;
-      const chars = [...text];
-      const charWidths = chars.map(c => ctx.measureText(c).width);
 
       // Draw Box
       ctx.fillStyle = colors.bg;
@@ -181,7 +188,7 @@ const App: React.FC = () => {
         ctx.shadowBlur = 40;
         ctx.shadowOffsetY = 20;
       }
-      ctx.fillRect(-boxWidth/2, -totalBoxHeight/2, boxWidth, totalBoxHeight);
+      ctx.fillRect(-layout.boxWidth/2, -totalBoxHeight/2, layout.boxWidth, totalBoxHeight);
 
       // Draw Text
       ctx.shadowColor = 'transparent';
@@ -189,14 +196,14 @@ const App: React.FC = () => {
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       
+      // Draw Loop
       // Start position: Left edge of box + padding
-      let cursorX = -boxWidth/2 + brandPadding;
-      const yAdjust = fontSize * 0.05; 
+      const startX = -layout.boxWidth/2 + brandPadding;
+      const yAdjust = fontSize * 0.05; // Poppins optical adjustment
 
-      for (let i = 0; i < chars.length; i++) {
-        ctx.fillText(chars[i], cursorX, yAdjust);
-        cursorX += charWidths[i] + tracking;
-      }
+      layout.charData.forEach(item => {
+         ctx.fillText(item.char, startX + item.x, yAdjust);
+      });
 
       ctx.restore();
     };
@@ -513,7 +520,7 @@ const App: React.FC = () => {
                 }}
               >
                 <div 
-                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] tracking-[-0.01em] whitespace-nowrap shadow-2xl"
+                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] whitespace-nowrap shadow-2xl"
                   style={{ 
                     background: getThemeColors(1).bg, 
                     color: getThemeColors(1).text,
@@ -524,7 +531,9 @@ const App: React.FC = () => {
                     paddingRight: `${brandPadding}px`,
                     // Fix optical vertical alignment for Poppins
                     lineHeight: 1, 
-                    paddingTop: `${fontSize * 0.05}px` 
+                    paddingTop: `${fontSize * 0.05}px`,
+                    letterSpacing: `${letterSpacingEm}em`,
+                    wordSpacing: `${wordSpacingEm}em`
                   }}
                 >
                   {text1 || ' '}
@@ -542,7 +551,7 @@ const App: React.FC = () => {
                 }}
               >
                 <div 
-                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] tracking-[-0.01em] whitespace-nowrap shadow-2xl"
+                  className="px-0 flex items-center justify-center font-[Poppins] font-[900] whitespace-nowrap shadow-2xl"
                   style={{ 
                     background: getThemeColors(2).bg, 
                     color: getThemeColors(2).text,
@@ -551,7 +560,9 @@ const App: React.FC = () => {
                     paddingLeft: `${brandPadding}px`,
                     paddingRight: `${brandPadding}px`,
                     lineHeight: 1, 
-                    paddingTop: `${fontSize * 0.05}px`
+                    paddingTop: `${fontSize * 0.05}px`,
+                    letterSpacing: `${letterSpacingEm}em`,
+                    wordSpacing: `${wordSpacingEm}em`
                   }}
                 >
                   {text2 || ' '}
